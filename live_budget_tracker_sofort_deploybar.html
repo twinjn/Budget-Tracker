@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Budget Tracker · Live</title>
+  <meta name="description" content="Minimaler Budget Tracker mit Diagramm, Suche und CSV Export. Lokal speichernd, sofort auf Netlify oder Vercel deploybar." />
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="icon" href="data:," />
+  <!-- Tailwind via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    /* schlanke Scrollbar */
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 999px; }
+    ::-webkit-scrollbar-track { background: #0b1220; }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+  <div class="mx-auto max-w-6xl p-6 space-y-6">
+    <!-- Header -->
+    <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight">Budget Tracker</h1>
+        <p class="text-slate-400 text-sm">Lokal speichernd, sofort online bereit</p>
+      </div>
+      <div class="grid grid-cols-3 gap-3">
+        <div class="rounded-2xl bg-slate-900 p-3 text-center shadow">
+          <p class="text-xs text-slate-400">Einnahmen</p>
+          <p id="kpiIncome" class="font-semibold"></p>
+        </div>
+        <div class="rounded-2xl bg-slate-900 p-3 text-center shadow">
+          <p class="text-xs text-slate-400">Ausgaben</p>
+          <p id="kpiExpense" class="font-semibold"></p>
+        </div>
+        <div class="rounded-2xl bg-slate-900 p-3 text-center shadow">
+          <p class="text-xs text-slate-400">Saldo</p>
+          <p id="kpiBalance" class="font-semibold"></p>
+        </div>
+      </div>
+    </header>
+
+    <!-- Eingabe und Chart -->
+    <section class="grid gap-6 md:grid-cols-3">
+      <!-- Eingabeformular -->
+      <div class="md:col-span-1 rounded-2xl bg-slate-900 p-4 shadow">
+        <form id="entryForm" class="space-y-3">
+          <div class="grid grid-cols-2 gap-2">
+            <select id="type" class="w-full rounded-xl border border-slate-800 bg-slate-950 p-2 outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="expense" selected>Ausgabe</option>
+              <option value="income">Einnahme</option>
+            </select>
+            <input id="date" type="date" class="w-full rounded-xl border border-slate-800 bg-slate-950 p-2 outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <input id="title" placeholder="Titel" class="w-full rounded-xl border border-slate-800 bg-slate-950 p-2 outline-none focus:ring-2 focus:ring-indigo-500" />
+          <div class="grid grid-cols-2 gap-2">
+            <input id="amount" type="number" step="0.05" min="0" placeholder="Betrag" class="w-full rounded-xl border border-slate-800 bg-slate-950 p-2 outline-none focus:ring-2 focus:ring-indigo-500" />
+            <input id="category" placeholder="Kategorie" class="w-full rounded-xl border border-slate-800 bg-slate-950 p-2 outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <select id="currency" class="w-full rounded-xl border border-slate-800 bg-slate-950 p-2 outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="CHF" selected>CHF</option>
+              <option value="EUR">EUR</option>
+              <option value="USD">USD</option>
+            </select>
+            <button class="rounded-xl bg-indigo-600 p-2 font-medium hover:bg-indigo-500 active:scale-[.99]">Hinzufügen</button>
+          </div>
+        </form>
+
+        <div class="mt-4 grid grid-cols-2 gap-2 text-sm">
+          <button id="exportCsv" class="rounded-xl bg-slate-800 p-2 hover:bg-slate-700">Export CSV</button>
+          <button id="importJson" class="rounded-xl bg-slate-800 p-2 hover:bg-slate-700">Import JSON</button>
+          <input id="fileInput" type="file" accept=".json" class="hidden" />
+          <button id="clearAll" class="col-span-2 rounded-xl bg-rose-600 p-2 hover:bg-rose-500">Alles löschen</button>
+        </div>
+        <p class="mt-3 text-xs text-slate-400">Tipp: Strg K für Suche, Strg Enter zum Speichern</p>
+      </div>
+
+      <!-- Chart -->
+      <div class="md:col-span-2 rounded-2xl bg-slate-900 p-4 shadow">
+        <div class="mb-2 flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-slate-300">Ausgaben nach Kategorie</h2>
+          <span id="rangeLabel" class="text-xs text-slate-400"></span>
+        </div>
+        <canvas id="catChart" height="140"></canvas>
+      </div>
+    </section>
+
+    <!-- Liste -->
+    <section class="rounded-2xl bg-slate-900 p-4 shadow">
+      <div class="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div class="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950 p-2">
+          <input id="search" placeholder="Suche Titel oder Kategorie" class="w-full bg-transparent outline-none" />
+          <button id="clearSearch" class="text-xs text-slate-400">X</button>
+        </div>
+        <select id="filterType" class="rounded-xl border border-slate-800 bg-slate-950 p-2 outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="all" selected>Alle</option>
+          <option value="income">Nur Einnahmen</option>
+          <option value="expense">Nur Ausgaben</option>
+        </select>
+        <select id="filterRange" class="rounded-xl border border-slate-800 bg-slate-950 p-2 outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="month" selected>Dieser Monat</option>
+          <option value="all">Gesamter Verlauf</option>
+        </select>
+      </div>
+
+      <div class="overflow-auto rounded-xl border border-slate-800">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-950 text-slate-300">
+            <tr>
+              <th class="p-3 text-left">Datum</th>
+              <th class="p-3 text-left">Titel</th>
+              <th class="p-3 text-left">Kategorie</th>
+              <th class="p-3 text-right">Betrag</th>
+              <th class="p-3 text-right">Art</th>
+              <th class="p-3 text-right">Aktion</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="pb-10 text-center text-xs text-slate-500">Speichert lokal im Browser · Keine Anmeldung nötig</footer>
+  </div>
+
+  <script>
+    // Hilfen
+    const $ = (id) => document.getElementById(id);
+    const today = () => new Date().toISOString().slice(0,10);
+    const fmt = (n, cur) => new Intl.NumberFormat('de-CH', { style: 'currency', currency: cur }).format(n);
+
+    // Zustand
+    const STORAGE_KEY = 'budget-tracker-data-v1';
+    const SETTINGS_KEY = 'budget-tracker-settings-v1';
+    let entries = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    let settings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{"currency":"CHF"}');
+
+    // Elemente
+    const entryForm = $('entryForm');
+    const typeEl = $('type');
+    const dateEl = $('date');
+    const titleEl = $('title');
+    const amountEl = $('amount');
+    const categoryEl = $('category');
+    const currencyEl = $('currency');
+    const exportCsvBtn = $('exportCsv');
+    const importJsonBtn = $('importJson');
+    const fileInput = $('fileInput');
+    const clearAllBtn = $('clearAll');
+
+    const searchEl = $('search');
+    const clearSearchBtn = $('clearSearch');
+    const filterTypeEl = $('filterType');
+    const filterRangeEl = $('filterRange');
+    const tbody = $('tbody');
+
+    const kpiIncome = $('kpiIncome');
+    const kpiExpense = $('kpiExpense');
+    const kpiBalance = $('kpiBalance');
+    const rangeLabel = $('rangeLabel');
+
+    // defaults
+    dateEl.value = today();
+    currencyEl.value = settings.currency || 'CHF';
+
+    // Speichern
+    const persist = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    const persistSettings = () => localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+
+    // Filtern nach Monat
+    function inCurrentMonth(d){
+      const now = new Date();
+      const dt = new Date(d);
+      return dt.getFullYear() === now.getFullYear() && dt.getMonth() === now.getMonth();
+    }
+
+    // KPIs berechnen
+    function computeSums(list){
+      let inc = 0, exp = 0;
+      for(const e of list){
+        if(e.type === 'income') inc += e.amount;
+        else exp += e.amount;
+      }
+      return { inc, exp, bal: inc - exp };
+    }
+
+    // Tabelle
+    function renderTable(list){
+      tbody.innerHTML = '';
+      const cur = currencyEl.value;
+      for(const e of list){
+        const tr = document.createElement('tr');
+        tr.className = 'odd:bg-slate-950/40';
+        tr.innerHTML = `
+          <td class="p-3 whitespace-nowrap">${e.date}</td>
+          <td class="p-3">${escapeHtml(e.title)}</td>
+          <td class="p-3">${escapeHtml(e.category || '')}</td>
+          <td class="p-3 text-right ${e.type==='expense' ? 'text-rose-300' : 'text-emerald-300'}">
+            ${e.type==='expense' ? '-' : ''}${fmt(e.amount, cur)}
+          </td>
+          <td class="p-3 text-right">${e.type === 'income' ? 'Einnahme' : 'Ausgabe'}</td>
+          <td class="p-3 text-right">
+            <button data-id="${e.id}" class="delete rounded-lg bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700">Löschen</button>
+          </td>`;
+        tbody.appendChild(tr);
+      }
+      // Delete Handler
+      tbody.querySelectorAll('button.delete').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-id');
+          entries = entries.filter(x => x.id !== id);
+          persist();
+          update();
+        });
+      });
+    }
+
+    // Suche und Filter anwenden
+    function applyFilters(){
+      const q = (searchEl.value || '').trim().toLowerCase();
+      const t = filterTypeEl.value; // all | income | expense
+      const r = filterRangeEl.value; // all | month
+
+      let list = [...entries].sort((a,b)=> b.createdAt - a.createdAt);
+      if(q){
+        list = list.filter(e => (e.title+" "+(e.category||'')).toLowerCase().includes(q));
+      }
+      if(t !== 'all') list = list.filter(e => e.type === t);
+      if(r === 'month') list = list.filter(e => inCurrentMonth(e.date));
+      rangeLabel.textContent = r === 'month' ? 'aktueller Monat' : 'gesamter Verlauf';
+      return list;
+    }
+
+    // Chart
+    let catChart;
+    function renderChart(list){
+      const ctx = document.getElementById('catChart');
+      const byCat = {};
+      for(const e of list){
+        if(e.type !== 'expense') continue;
+        const k = e.category || 'Sonstiges';
+        byCat[k] = (byCat[k] || 0) + e.amount;
+      }
+      const labels = Object.keys(byCat);
+      const values = Object.values(byCat);
+
+      const data = {
+        labels,
+        datasets: [{ data: values }]
+      };
+
+      if(catChart){
+        catChart.data = data;
+        catChart.update();
+      } else {
+        catChart = new Chart(ctx, {
+          type: 'doughnut',
+          data,
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { position: 'bottom', labels: { color: '#cbd5e1' } },
+              tooltip: { callbacks: { label: (item) => {
+                const cur = currencyEl.value;
+                const v = item.parsed;
+                const total = values.reduce((a,b)=>a+b,0) || 1;
+                const pct = Math.round(v*100/total);
+                return `${item.label}: ${fmt(v, cur)} (${pct}%)`;
+              }}}
+            }
+          }
+        });
+      }
+    }
+
+    // HTML Escaping
+    function escapeHtml(str){
+      return str.replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[s]));
+    }
+
+    // Hauptupdate
+    function update(){
+      const list = applyFilters();
+      renderTable(list);
+      const sums = computeSums(list);
+      kpiIncome.textContent = fmt(sums.inc, currencyEl.value);
+      kpiExpense.textContent = fmt(sums.exp, currencyEl.value);
+      kpiBalance.textContent = fmt(sums.bal, currencyEl.value);
+      renderChart(list);
+    }
+
+    // Form speichern
+    entryForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const amount = parseFloat(amountEl.value);
+      if(!titleEl.value || !amount || amount <= 0){
+        amountEl.focus();
+        return;
+      }
+      const entry = {
+        id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+        type: typeEl.value,
+        title: titleEl.value.trim(),
+        amount: Math.round(amount * 100) / 100,
+        category: (categoryEl.value || '').trim() || (typeEl.value === 'income' ? 'Allgemein' : 'Sonstiges'),
+        date: dateEl.value || today(),
+        createdAt: Date.now()
+      };
+      entries.unshift(entry);
+      persist();
+      titleEl.value = '';
+      amountEl.value = '';
+      categoryEl.value = '';
+      titleEl.focus();
+      update();
+    });
+
+    // Suche
+    searchEl.addEventListener('input', update);
+    clearSearchBtn.addEventListener('click', () => { searchEl.value = ''; update(); });
+    filterTypeEl.addEventListener('change', update);
+    filterRangeEl.addEventListener('change', update);
+
+    // Währung
+    currencyEl.addEventListener('change', () => {
+      settings.currency = currencyEl.value;
+      persistSettings();
+      update();
+    });
+
+    // Export CSV
+    exportCsvBtn.addEventListener('click', () => {
+      const cur = currencyEl.value;
+      const header = ['id','art','titel','kategorie','datum','betrag'];
+      const rows = entries.map(e => [e.id, e.type, escCsv(e.title), escCsv(e.category||''), e.date, e.amount]);
+      const csv = [header.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `budget-export-${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+    });
+
+    function escCsv(v){
+      const s = String(v ?? '');
+      if(/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+
+    // Import JSON
+    importJsonBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      const f = fileInput.files[0];
+      if(!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const arr = JSON.parse(reader.result);
+          if(Array.isArray(arr)){
+            // einfache Validierung
+            const cleaned = arr.map(x => ({
+              id: x.id || (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)),
+              type: x.type === 'income' ? 'income' : 'expense',
+              title: String(x.title || 'Eintrag'),
+              amount: Math.abs(Number(x.amount) || 0),
+              category: String(x.category || 'Sonstiges'),
+              date: x.date && !isNaN(new Date(x.date)) ? x.date.slice(0,10) : today(),
+              createdAt: Number(x.createdAt) || Date.now()
+            })).filter(x => x.amount > 0);
+            entries = cleaned.concat(entries);
+            persist();
+            update();
+          } else {
+            alert('Ungültiges JSON');
+          }
+        } catch(e){
+          alert('Konnte Datei nicht lesen');
+        }
+      };
+      reader.readAsText(f);
+      fileInput.value = '';
+    });
+
+    // Alles löschen
+    clearAllBtn.addEventListener('click', () => {
+      if(confirm('Wirklich alles löschen?')){
+        entries = [];
+        persist();
+        update();
+      }
+    });
+
+    // Shortcuts
+    document.addEventListener('keydown', (e) => {
+      if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k'){
+        e.preventDefault();
+        searchEl.focus();
+      }
+      if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){
+        e.preventDefault();
+        entryForm.requestSubmit();
+      }
+    });
+
+    // Start
+    update();
+  </script>
+</body>
+</html>
