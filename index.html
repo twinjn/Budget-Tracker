@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Budget Tracker · Live</title>
+  <link rel="stylesheet" href="styles.css">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Budget Tracker</h1>
+      <p>Lokal speichernd, sofort online bereit</p>
+      <div class="kpis">
+        <div><span>Einnahmen</span><p id="kpiIncome"></p></div>
+        <div><span>Ausgaben</span><p id="kpiExpense"></p></div>
+        <div><span>Saldo</span><p id="kpiBalance"></p></div>
+      </div>
+    </header>
+
+    <section class="main">
+      <div class="form-box">
+        <form id="entryForm">
+          <select id="type">
+            <option value="expense">Ausgabe</option>
+            <option value="income">Einnahme</option>
+          </select>
+          <input id="date" type="date">
+          <input id="title" placeholder="Titel">
+          <input id="amount" type="number" step="0.05" min="0" placeholder="Betrag">
+          <input id="category" placeholder="Kategorie">
+          <select id="currency">
+            <option value="CHF">CHF</option>
+            <option value="EUR">EUR</option>
+            <option value="USD">USD</option>
+          </select>
+          <button type="submit">Hinzufügen</button>
+        </form>
+
+        <div class="tools">
+          <button id="exportCsv">Export CSV</button>
+          <button id="importJson">Import JSON</button>
+          <input id="fileInput" type="file" accept=".json" hidden>
+          <button id="clearAll">Alles löschen</button>
+        </div>
+      </div>
+
+      <div class="chart-box">
+        <h2>Ausgaben nach Kategorie</h2>
+        <span id="rangeLabel"></span>
+        <canvas id="catChart"></canvas>
+      </div>
+    </section>
+
+    <section class="table-box">
+      <input id="search" placeholder="Suche">
+      <button id="clearSearch">X</button>
+      <select id="filterType">
+        <option value="all">Alle</option>
+        <option value="income">Nur Einnahmen</option>
+        <option value="expense">Nur Ausgaben</option>
+      </select>
+      <select id="filterRange">
+        <option value="month">Dieser Monat</option>
+        <option value="all">Gesamter Verlauf</option>
+      </select>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Datum</th>
+            <th>Titel</th>
+            <th>Kategorie</th>
+            <th>Betrag</th>
+            <th>Art</th>
+            <th>Aktion</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
